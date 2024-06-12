@@ -141,3 +141,41 @@ To create a Spring Boot application that continuously generates data and sends i
    - You should see the messages being generated and sent to the WebSocket, and then displayed on the web page.
 
 This setup includes a scheduled task that generates data periodically and sends it to a WebSocket endpoint, which the client receives and displays in real-time. You can modify the data generation logic to fit your requirements.
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Example</title>
+</head>
+<body>
+    <h1>WebSocket Example</h1>
+    <input type="text" id="messageInput" placeholder="Enter message">
+    <button onclick="sendMessage()">Send Message</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('http://localhost:8080/ws-example');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+            });
+        }
+
+        function sendMessage() {
+            var messageInput = document.getElementById('messageInput');
+            var message = messageInput.value;
+            stompClient.send('/app/sendMessage', {}, JSON.stringify({ 'message': message }));
+            messageInput.value = '';
+        }
+
+        connect();
+    </script>
+</body>
+</html>
