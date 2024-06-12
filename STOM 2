@@ -1,0 +1,215 @@
+Sure, I'll provide you with a complete Spring Boot application that generates random data and sends it to a WebSocket STOMP endpoint.
+
+### Step 1: Set Up Your Spring Boot Application
+
+Create a new Spring Boot application using Spring Initializr (https://start.spring.io/) with the following dependencies:
+- Spring Web
+- Spring WebSocket
+- Spring Boot Actuator
+
+### Step 2: Create the Spring Boot Application
+
+#### 2.1. `pom.xml`
+
+Make sure your `pom.xml` includes the necessary dependencies:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+</dependencies>
+```
+
+#### 2.2. WebSocket Configuration
+
+Create a WebSocket configuration class to configure STOMP messaging.
+
+```java
+package com.example.websocketdemo.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws-example").setAllowedOrigins("*").withSockJS();
+    }
+}
+```
+
+#### 2.3. Message Controller
+
+Create a controller to handle WebSocket messages.
+
+```java
+package com.example.websocketdemo.controller;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class MessageController {
+
+    @MessageMapping("/sendMessage")
+    @SendTo("/topic/messages")
+    public Message sendMessage(Message message) {
+        return message;
+    }
+}
+```
+
+#### 2.4. Message Model
+
+Create a model class for the message.
+
+```java
+package com.example.websocketdemo.model;
+
+public class Message {
+    private String message;
+
+    public Message() {
+    }
+
+    public Message(String message) {
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+}
+```
+
+#### 2.5. Random Data Generator
+
+Create a scheduled task that generates random data and sends it to the WebSocket endpoint.
+
+```java
+package com.example.websocketdemo.scheduler;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.Random;
+
+@Component
+public class RandomDataGenerator {
+
+    @Autowired
+    private SimpMessagingTemplate template;
+
+    private Random random = new Random();
+
+    @Scheduled(fixedRate = 5000)
+    public void generateData() {
+        String data = "Random Data: " + random.nextInt(100);
+        template.convertAndSend("/topic/messages", new Message(data));
+    }
+}
+```
+
+#### 2.6. Enable Scheduling
+
+Enable scheduling in your main application class.
+
+```java
+package com.example.websocketdemo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class WebSocketDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebSocketDemoApplication.class, args);
+    }
+}
+```
+
+### Step 3: Create the HTML File
+
+Create an HTML file that connects to the WebSocket and displays the messages.
+
+#### `src/main/resources/static/index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Example</title>
+</head>
+<body>
+    <h1>WebSocket Example</h1>
+    <div id="messages"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/ws-example');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/messages', function (messageOutput) {
+                    showMessage(JSON.parse(messageOutput.body).message);
+                });
+            });
+        }
+
+        function showMessage(message) {
+            var messagesDiv = document.getElementById('messages');
+            var messageElement = document.createElement('div');
+            messageElement.appendChild(document.createTextNode(message));
+            messagesDiv.appendChild(messageElement);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Step 4: Run Your Application
+
+Run your Spring Boot application and open `http://localhost:8080` in your browser. You should see the random data being generated and displayed on the web page every 5 seconds.
+
+This completes the setup for a Spring Boot application that generates random data and sends it to a WebSocket STOMP endpoint.
