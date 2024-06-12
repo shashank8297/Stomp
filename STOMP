@@ -1,0 +1,143 @@
+To create a Spring Boot application that continuously generates data and sends it to a WebSocket using STOMP (Simple Text Oriented Messaging Protocol), follow these steps:
+
+1. **Set Up Your Spring Boot Project**:
+   - Create a new Spring Boot project using Spring Initializr (https://start.spring.io/) or your preferred IDE.
+   - Add the following dependencies:
+     - Spring Web
+     - Spring WebSocket
+     - Spring Boot DevTools (optional, for development convenience)
+
+2. **Project Structure**:
+   Your project should have the following structure:
+   ```
+   src/main/java/com/example/websocketdemo
+   ├── WebSocketDemoApplication.java
+   ├── config
+   │   └── WebSocketConfig.java
+   ├── controller
+   │   └── WebSocketController.java
+   ├── service
+   │   └── DataGeneratorService.java
+   src/main/resources
+   ├── application.properties
+   └── static
+       └── index.html
+   ```
+
+3. **Create the Main Application Class**:
+   ```java
+   package com.example.websocketdemo;
+
+   import org.springframework.boot.SpringApplication;
+   import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+   @SpringBootApplication
+   public class WebSocketDemoApplication {
+       public static void main(String[] args) {
+           SpringApplication.run(WebSocketDemoApplication.class, args);
+       }
+   }
+   ```
+
+4. **Configure WebSocket**:
+   Create a configuration class to configure the WebSocket endpoint.
+   ```java
+   package com.example.websocketdemo.config;
+
+   import org.springframework.context.annotation.Configuration;
+   import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+   import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+   import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+   import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+   @Configuration
+   @EnableWebSocketMessageBroker
+   public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+       @Override
+       public void configureMessageBroker(MessageBrokerRegistry config) {
+           config.enableSimpleBroker("/topic");
+           config.setApplicationDestinationPrefixes("/app");
+       }
+
+       @Override
+       public void registerStompEndpoints(StompEndpointRegistry registry) {
+           registry.addEndpoint("/ws").withSockJS();
+       }
+   }
+   ```
+
+5. **Create a Controller to Handle WebSocket Messages**:
+   ```java
+   package com.example.websocketdemo.controller;
+
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.messaging.handler.annotation.SendTo;
+   import org.springframework.messaging.simp.SimpMessagingTemplate;
+   import org.springframework.scheduling.annotation.Scheduled;
+   import org.springframework.stereotype.Controller;
+
+   @Controller
+   public class WebSocketController {
+
+       @Autowired
+       private SimpMessagingTemplate template;
+
+       @Scheduled(fixedRate = 2000)
+       public void sendMessage() {
+           String message = "Current time: " + System.currentTimeMillis();
+           template.convertAndSend("/topic/messages", message);
+       }
+   }
+   ```
+
+6. **Generate Data Periodically**:
+   In the `WebSocketController`, we use a scheduled method to send messages every 2 seconds. You can adjust this interval and the content of the message as needed.
+
+7. **Create an HTML File to Receive Messages**:
+   Create an `index.html` file in the `src/main/resources/static` directory.
+   ```html
+   <!DOCTYPE html>
+   <html>
+   <head>
+       <title>WebSocket Demo</title>
+       <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+       <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+       <script>
+           let stompClient = null;
+
+           function connect() {
+               const socket = new SockJS('/ws');
+               stompClient = Stomp.over(socket);
+               stompClient.connect({}, function (frame) {
+                   console.log('Connected: ' + frame);
+                   stompClient.subscribe('/topic/messages', function (message) {
+                       showMessage(JSON.parse(message.body));
+                   });
+               });
+           }
+
+           function showMessage(message) {
+               const response = document.getElementById('response');
+               const p = document.createElement('p');
+               p.style.wordWrap = 'break-word';
+               p.appendChild(document.createTextNode(message));
+               response.appendChild(p);
+           }
+
+           window.onload = connect;
+       </script>
+   </head>
+   <body>
+       <h2>WebSocket Demo</h2>
+       <div id="response"></div>
+   </body>
+   </html>
+   ```
+
+8. **Run Your Application**:
+   - Run your Spring Boot application. 
+   - Open a web browser and navigate to `http://localhost:8080` (or the port your Spring Boot application is running on).
+   - You should see the messages being generated and sent to the WebSocket, and then displayed on the web page.
+
+This setup includes a scheduled task that generates data periodically and sends it to a WebSocket endpoint, which the client receives and displays in real-time. You can modify the data generation logic to fit your requirements.
