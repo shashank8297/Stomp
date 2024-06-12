@@ -1,0 +1,177 @@
+Sure, I'll explain the entire code step by step, focusing on each part's functionality within the Spring Boot application that generates random data and sends it to a WebSocket STOMP endpoint.
+
+### Step 1: Setting Up Dependencies
+
+#### `pom.xml`
+This file contains the dependencies required for the application. Key dependencies include:
+- `spring-boot-starter-web`: For building web applications, including RESTful applications.
+- `spring-boot-starter-websocket`: For WebSocket support.
+- `spring-boot-starter-actuator`: For application monitoring.
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+</dependencies>
+```
+
+### Step 2: WebSocket Configuration
+
+#### `WebSocketConfig.java`
+This class configures the WebSocket and STOMP messaging. It enables the WebSocket message broker and defines the endpoint and message broker configurations.
+
+```java
+package com.example.websocketdemo.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws-example")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
+    }
+}
+```
+
+1. `@EnableWebSocketMessageBroker`: Enables WebSocket message handling, backed by a message broker.
+2. `configureMessageBroker`: Configures a message broker that will handle messages from clients. Here, a simple memory-based message broker is used with destination prefixes `/topic`.
+3. `registerStompEndpoints`: Registers the `/ws-example` endpoint, enabling SockJS fallback options for browsers that don’t support WebSocket.
+
+### Step 3: Controller to Handle WebSocket Messages
+
+#### `MessageController.java`
+This controller handles messages sent from the client to the server. It uses the `@MessageMapping` annotation to map messages to specific handler methods and `@SendTo` to send messages to the specified topic.
+
+```java
+package com.example.websocketdemo.controller;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class MessageController {
+
+    @MessageMapping("/sendMessage")
+    @SendTo("/topic/messages")
+    public Message sendMessage(Message message) {
+        return message;
+    }
+}
+```
+
+1. `@MessageMapping("/sendMessage")`: Maps messages sent to `/app/sendMessage` to the `sendMessage` method.
+2. `@SendTo("/topic/messages")`: Specifies that the return value of the `sendMessage` method should be sent to the `/topic/messages` destination.
+
+### Step 4: Data Model
+
+#### `Message.java`
+This simple Java class represents the message model.
+
+```java
+package com.example.websocketdemo.model;
+
+public class Message {
+    private String message;
+
+    public Message() {
+    }
+
+    public Message(String message) {
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+}
+```
+
+### Step 5: Generating and Sending Random Data
+
+#### `RandomDataGenerator.java`
+This class generates random data at fixed intervals and sends it to the WebSocket topic.
+
+```java
+package com.example.websocketdemo.scheduler;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.Random;
+
+@Component
+public class RandomDataGenerator {
+
+    @Autowired
+    private SimpMessagingTemplate template;
+
+    private Random random = new Random();
+
+    @Scheduled(fixedRate = 5000)
+    public void generateData() {
+        String data = "Random Data: " + random.nextInt(100);
+        template.convertAndSend("/topic/messages", new Message(data));
+    }
+}
+```
+
+1. `@Scheduled(fixedRate = 5000)`: Schedules the `generateData` method to run every 5 seconds.
+2. `generateData`: Generates a random number and sends it as a `Message` to the `/topic/messages` destination using `SimpMessagingTemplate`.
+
+### Step 6: Main Application Class
+
+#### `WebSocketDemoApplication.java`
+This class is the entry point of the Spring Boot application. It enables scheduling.
+
+```java
+package com.example.websocketdemo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class WebSocketDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebSocketDemoApplication.class, args);
+    }
+}
+```
+
+1. `@SpringBootApplication`: Marks this class as a Spring Boot
