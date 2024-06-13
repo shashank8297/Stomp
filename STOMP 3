@@ -1,0 +1,267 @@
+Certainly! Below is an updated Spring Boot application with the Java classes and the XML configuration for WebSocket and STOMP.
+
+### Step 1: Update `pom.xml`
+
+Ensure your `pom.xml` includes the necessary dependencies:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+    </dependency>
+</dependencies>
+```
+
+### Step 2: Update WebSocket Configuration Class
+
+You can retain the configuration class for additional setup if needed.
+
+```java
+package com.example.websocketdemo.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+    // Empty as configuration is handled in XML
+}
+```
+
+### Step 3: Update Message Controller
+
+```java
+package com.example.websocketdemo.controller;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class MessageController {
+
+    @MessageMapping("/sendMessage")
+    @SendTo("/topic/messages")
+    public Message sendMessage(Message message) {
+        return message;
+    }
+}
+```
+
+### Step 4: Update Message Model
+
+```java
+package com.example.websocketdemo.model;
+
+public class Message {
+    private String message;
+
+    public Message() {
+    }
+
+    public Message(String message) {
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+}
+```
+
+### Step 5: Update Random Data Generator
+
+```java
+package com.example.websocketdemo.scheduler;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.Random;
+
+@Component
+public class RandomDataGenerator {
+
+    @Autowired
+    private SimpMessagingTemplate template;
+
+    private Random random = new Random();
+
+    @Scheduled(fixedRate = 5000)
+    public void generateData() {
+        String data = "Random Data: " + random.nextInt(100);
+        template.convertAndSend("/topic/messages", new Message(data));
+    }
+}
+```
+
+### Step 6: Update Main Application Class
+
+```java
+package com.example.websocketdemo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class WebSocketDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebSocketDemoApplication.class, args);
+    }
+}
+```
+
+### Step 7: Create HTML File
+
+Create an HTML file in `src/main/resources/static/index.html`.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Example</title>
+</head>
+<body>
+    <h1>WebSocket Example</h1>
+    <div id="messages"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/ws-example');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/messages', function (messageOutput) {
+                    showMessage(JSON.parse(messageOutput.body).message);
+                });
+            });
+        }
+
+        function showMessage(message) {
+            var messagesDiv = document.getElementById('messages');
+            var messageElement = document.createElement('div');
+            messageElement.appendChild(document.createTextNode(message));
+            messagesDiv.appendChild(messageElement);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Step 8: XML Configuration for WebSocket and STOMP
+
+Create the XML configuration file `integration-config.xml` in `src/main/resources`.
+
+```xml
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:int-websocket="http://www.springframework.org/schema/integration/websocket"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:task="http://www.springframework.org/schema/task"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/integration
+           http://www.springframework.org/schema/integration/spring-integration.xsd
+           http://www.springframework.org/schema/integration/websocket
+           http://www.springframework.org/schema/integration/websocket/spring-integration-websocket.xsd
+           http://www.springframework.org/schema/task
+           http://www.springframework.org/schema/task/spring-task.xsd">
+
+    <!-- Task Executor Configuration -->
+    <task:executor id="executor" pool-size="10"/>
+
+    <!-- WebSocket and STOMP Configuration -->
+    <bean id="stompSubProtocolHandler" class="org.springframework.web.socket.messaging.StompSubProtocolHandler"/>
+
+    <int-websocket:server-container id="serverWebSocketContainer"
+                                    path="/ws-example"
+                                    allowed-origins="*"
+                                    send-time-limit="15000"
+                                    send-buffer-size-limit="512000">
+        <int-websocket:sockjs client-library-url="https://cdn.jsdelivr.net/sockjs/1.1.4/sockjs.min.js" heartbeat-time="30000"/>
+    </int-websocket:server-container>
+
+    <!-- Inbound Channel Adapter -->
+    <int-websocket:inbound-channel-adapter channel="inboundWebsocketMessages"
+                                           payload-type="com.fasterxml.jackson.databind.JsonNode"
+                                           container="serverWebSocketContainer"
+                                           default-protocol-handler="stompSubProtocolHandler"/>
+
+    <!-- Outbound Channel Adapter -->
+    <int-websocket:outbound-channel-adapter channel="messagesToClient"
+                                            container="serverWebSocketContainer"
+                                            default-protocol-handler="stompSubProtocolHandler">
+        <int-websocket:request-handler-advice-chain>
+            <ref bean="clientOutboundAdapterAdvice"/>
+        </int-websocket:request-handler-advice-chain>
+    </int-websocket:outbound-channel-adapter>
+
+    <!-- Channels -->
+    <int:channel id="inboundWebsocketMessages"/>
+    <int:channel id="messagesToClient">
+        <int:dispatcher task-executor="executor"/>
+    </int:channel>
+
+    <!-- Message Broker Configuration -->
+    <bean id="messageBrokerRegistry" class="org.springframework.messaging.simp.config.MessageBrokerRegistry">
+        <property name="applicationDestinationPrefixes" value="/app"/>
+        <property name="simpleBrokerDestinationPrefixes" value="/topic"/>
+    </bean>
+
+    <!-- Random Data Generator -->
+    <bean id="randomDataGenerator" class="com.example.websocketdemo.scheduler.RandomDataGenerator"/>
+
+    <!-- Scheduled Task for Generating Random Data -->
+    <task:scheduled-tasks>
+        <task:scheduled ref="randomDataGenerator" method="generateData" fixed-rate="5000"/>
+    </task:scheduled-tasks>
+
+</beans>
+```
+
+### Step 9: Reference XML Configuration in Application
+
+Make sure your `application.properties` file references the XML configuration:
+
+```properties
+spring.config.location=classpath:/integration-config.xml
+```
+
+### Running the Application
+
+Run your Spring Boot application and open `http://localhost:8080` in your browser. You should see the random data being generated and displayed on the web page every 5 seconds.
+
+This completes the setup for a Spring Boot application that generates random data and sends it to a WebSocket STOMP endpoint with the configuration provided in an XML file.
