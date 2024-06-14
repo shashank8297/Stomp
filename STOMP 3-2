@@ -213,3 +213,269 @@ Create an HTML file that connects to the WebSocket and displays the messages.
 Run your Spring Boot application and open `http://localhost:8080` in your browser. You should see the random data being generated and displayed on the web page every 5 seconds.
 
 This setup moves the WebSocket configuration to the XML file `integrate.xml` while keeping the rest of the Spring Boot application structure unchanged.
+
+
+
+
+
+
+If the `context:component-scan` element is causing issues, you can manually register your beans using the `bean` element within the `integration.xml` file. This approach is more verbose but can help bypass issues with namespace handling.
+
+### Step-by-Step Solution
+
+1. **Remove `context:component-scan`**: Remove the `context:component-scan` element from your `integration.xml`.
+
+2. **Manually Define Beans**: Manually define the beans that you need in the `integration.xml` file.
+
+Here is how you can manually define the necessary beans in your `integration.xml`.
+
+#### 1. Updated `integration.xml`
+
+Manually register your beans in the `integration.xml` file:
+
+#### `src/main/resources/com/gehealthcare/mps/streaming/integration.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:websocket="http://www.springframework.org/schema/websocket"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/websocket
+           http://www.springframework.org/schema/websocket/spring-websocket.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!-- Manually register beans -->
+    <bean id="messageController" class="com.example.websocketdemo.controller.MessageController"/>
+    <bean id="randomDataGenerator" class="com.example.websocketdemo.scheduler.RandomDataGenerator"/>
+    <bean id="message" class="com.example.websocketdemo.model.Message"/>
+
+    <websocket:message-broker application-destination-prefix="/app">
+        <websocket:stomp-endpoint path="/ws-example">
+            <websocket:sockjs/>
+        </websocket:stomp-endpoint>
+        <websocket:simple-broker prefix="/topic"/>
+    </websocket:message-broker>
+
+</beans>
+```
+
+### Full Application Structure
+
+#### 1. `pom.xml`
+
+Ensure you have the necessary dependencies:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+</dependencies>
+```
+
+#### 2. `integration.xml`
+
+Ensure the file is correctly formatted and located at `src/main/resources/com/gehealthcare/mps/streaming/integration.xml`.
+
+#### `src/main/resources/com/gehealthcare/mps/streaming/integration.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:websocket="http://www.springframework.org/schema/websocket"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/websocket
+           http://www.springframework.org/schema/websocket/spring-websocket.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!-- Manually register beans -->
+    <bean id="messageController" class="com.example.websocketdemo.controller.MessageController"/>
+    <bean id="randomDataGenerator" class="com.example.websocketdemo.scheduler.RandomDataGenerator"/>
+    <bean id="message" class="com.example.websocketdemo.model.Message"/>
+
+    <websocket:message-broker application-destination-prefix="/app">
+        <websocket:stomp-endpoint path="/ws-example">
+            <websocket:sockjs/>
+        </websocket:stomp-endpoint>
+        <websocket:simple-broker prefix="/topic"/>
+    </websocket:message-broker>
+
+</beans>
+```
+
+#### 3. Message Controller
+
+No changes needed.
+
+```java
+package com.example.websocketdemo.controller;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class MessageController {
+
+    @MessageMapping("/sendMessage")
+    @SendTo("/topic/messages")
+    public Message sendMessage(Message message) {
+        return message;
+    }
+}
+```
+
+#### 4. Message Model
+
+No changes needed.
+
+```java
+package com.example.websocketdemo.model;
+
+public class Message {
+    private String message;
+
+    public Message() {
+    }
+
+    public Message(String message) {
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+}
+```
+
+#### 5. Random Data Generator
+
+No changes needed.
+
+```java
+package com.example.websocketdemo.scheduler;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.Random;
+
+@Component
+public class RandomDataGenerator {
+
+    @Autowired
+    private SimpMessagingTemplate template;
+
+    private Random random = new Random();
+
+    @Scheduled(fixedRate = 5000)
+    public void generateData() {
+        String data = "Random Data: " + random.nextInt(100);
+        template.convertAndSend("/topic/messages", new Message(data));
+    }
+}
+```
+
+#### 6. Main Application Class
+
+Ensure the path in the `@ImportResource` annotation is correct:
+
+```java
+package com.example.websocketdemo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.context.annotation.ImportResource;
+
+@SpringBootApplication
+@EnableScheduling
+@ImportResource("classpath:com/gehealthcare/mps/streaming/integration.xml")
+public class WebSocketDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebSocketDemoApplication.class, args);
+    }
+}
+```
+
+#### 7. HTML File
+
+No changes needed.
+
+#### `src/main/resources/static/index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Example</title>
+</head>
+<body>
+    <h1>WebSocket Example</h1>
+    <div id="messages"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/ws-example');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/messages', function (messageOutput) {
+                    showMessage(JSON.parse(messageOutput.body).message);
+                });
+            });
+        }
+
+        function showMessage(message) {
+            var messagesDiv = document.getElementById('messages');
+            var messageElement = document.createElement('div');
+            messageElement.appendChild(document.createTextNode(message));
+            messagesDiv.appendChild(messageElement);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Step 4: Run Your Application
+
+Run your Spring Boot application and open `http://localhost:8080` in your browser. You should see the random data being generated and displayed on the web page every 5 seconds.
+
+By manually defining the beans, you avoid potential issues with the `context:component-scan` element. If the error persists, please provide more details about the specific error message and the context around line 36 in your XML file.
