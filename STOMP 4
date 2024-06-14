@@ -1,0 +1,264 @@
+Certainly! Below is the complete Spring Boot application with Kafka and WebSocket configurations consolidated into a single XML file (`application-config.xml`).
+
+### Project Structure
+```plaintext
+kafka-consumer
+├── src
+│   ├── main
+│   │   ├── java
+│   │   │   └── com
+│   │   │       └── example
+│   │   │           └── consumer
+│   │   │               ├── KafkaConsumerApplication.java
+│   │   │               ├── MessageController.java
+│   │   │               └── Message.java
+│   │   └── resources
+│   │       ├── application.properties
+│   │       └── application-config.xml
+└── pom.xml
+```
+
+### `pom.xml`
+Ensure the dependencies for Spring Boot, Kafka, and WebSocket are included.
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>kafka-consumer</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.6.3</version>
+    </parent>
+
+    <dependencies>
+        <!-- Spring Boot Starter Web for web development -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- Spring for Apache Kafka to work with Kafka -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <!-- Spring Boot Starter for WebSocket support -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <!-- STOMP support for WebSocket -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-stomp</artifactId>
+        </dependency>
+    </dependencies>
+
+    <properties>
+        <java.version>11</java.version>
+    </properties>
+
+    <build>
+        <plugins>
+            <!-- Package as an executable JAR -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+### `application.properties`
+Configure Kafka settings and server port.
+
+```properties
+# Kafka configuration
+spring.kafka.bootstrap-servers=localhost:9092
+spring.kafka.consumer.group-id=my-group-id
+spring.kafka.consumer.auto-offset-reset=earliest
+
+# WebSocket configuration
+server.port=8080
+
+# Logging level
+logging.level.org.apache.kafka=DEBUG
+logging.level.org.springframework.kafka=DEBUG
+```
+
+### `KafkaConsumerApplication.java`
+Main class to run the Spring Boot application.
+
+```java
+package com.example.consumer;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ImportResource;
+
+@SpringBootApplication
+@ImportResource("classpath:application-config.xml")
+public class KafkaConsumerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(KafkaConsumerApplication.class, args);
+    }
+}
+```
+
+### `MessageController.java`
+Controller class to handle WebSocket messages.
+
+```java
+package com.example.consumer;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class MessageController {
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @KafkaListener(topics = "topic-name", groupId = "my-group-id")
+    public void listen(String message) {
+        messagingTemplate.convertAndSend("/topic/messages", message);
+    }
+}
+```
+
+### `Message.java`
+Simple class to represent Kafka messages.
+
+```java
+package com.example.consumer;
+
+public class Message {
+    private String content;
+
+    public Message() {
+    }
+
+    public Message(String content) {
+        this.content = content;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+}
+```
+
+### `application-config.xml`
+Combined configuration file for Kafka and WebSocket.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:kafka="http://www.springframework.org/schema/kafka"
+       xmlns:websocket="http://www.springframework.org/schema/websocket"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+           http://www.springframework.org/schema/kafka http://www.springframework.org/schema/kafka/spring-kafka.xsd
+           http://www.springframework.org/schema/websocket http://www.springframework.org/schema/websocket/spring-websocket.xsd">
+
+    <context:annotation-config/>
+    <context:component-scan base-package="com.example.consumer"/>
+
+    <!-- Kafka Configuration -->
+    <kafka:annotation-driven/>
+    
+    <bean id="consumerFactory" class="org.springframework.kafka.core.DefaultKafkaConsumerFactory">
+        <constructor-arg>
+            <map>
+                <entry key="bootstrap.servers" value="${spring.kafka.bootstrap-servers}"/>
+                <entry key="group.id" value="${spring.kafka.consumer.group-id}"/>
+                <entry key="key.deserializer" value="org.apache.kafka.common.serialization.StringDeserializer"/>
+                <entry key="value.deserializer" value="org.apache.kafka.common.serialization.StringDeserializer"/>
+            </map>
+        </constructor-arg>
+    </bean>
+
+    <bean id="kafkaListenerContainerFactory" class="org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory">
+        <property name="consumerFactory" ref="consumerFactory"/>
+    </bean>
+
+    <!-- WebSocket Configuration -->
+    <websocket:message-broker>
+        <websocket:stomp-endpoint path="/websocket">
+            <websocket:sockjs/>
+        </websocket:stomp-endpoint>
+        <websocket:simple-broker prefix="/topic"/>
+        <websocket:application-destination-prefix>/app</websocket:application-destination-prefix>
+    </websocket:message-broker>
+</beans>
+```
+
+### Frontend HTML (`index.html`)
+Ensure you have the frontend HTML to display messages from the WebSocket.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kafka Message Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1"></script>
+</head>
+<body>
+    <h1>Kafka Messages</h1>
+    <ul id="message-list"></ul>
+
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/websocket');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/messages', function (message) {
+                    showMessage(JSON.parse(message.body));
+                });
+            });
+        }
+
+        function showMessage(message) {
+            var messageList = document.getElementById('message-list');
+            var listItem = document.createElement('li');
+            listItem.appendChild(document.createTextNode(message.content));
+            messageList.appendChild(listItem);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Explanation
+- **`pom.xml`**: Includes necessary dependencies for Spring Boot, Kafka, and WebSocket.
+- **`application.properties`**: Configures Kafka settings (`spring.kafka.bootstrap-servers`, `spring.kafka.consumer.group-id`) and server port (`server.port`).
+- **`KafkaConsumerApplication.java`**: Main Spring Boot application class that imports the `application-config.xml` file.
+- **`MessageController.java`**: Kafka message consumer and WebSocket message sender.
+- **`Message.java`**: Simple class to represent Kafka messages.
+- **`application-config.xml`**: Consolidated configuration file that handles both Kafka and WebSocket configurations.
+- **`index.html`**: Frontend HTML to display Kafka messages received via WebSocket.
+
+This setup consolidates the entire application with Kafka and WebSocket configurations into a single XML file (`application-config.xml`), providing a complete example of consuming Kafka messages and pushing them to a WebSocket-connected frontend in a Spring Boot application. Adjust configurations and paths according to your specific environment and requirements.
