@@ -1,0 +1,215 @@
+To achieve your goal of configuring WebSocket using an XML configuration file (`integrate.xml`), you need to change the way the WebSocket settings are defined and move them from the Java configuration class to an XML configuration file. Below is the modified version of the application with the WebSocket configuration in `integrate.xml`.
+
+### Step 1: Create the Spring Boot Application
+
+#### 1.1. `pom.xml`
+
+Make sure your `pom.xml` includes the necessary dependencies:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+</dependencies>
+```
+
+#### 1.2. WebSocket Configuration
+
+Move the WebSocket configuration to an XML file.
+
+#### `src/main/resources/integrate.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:websocket="http://www.springframework.org/schema/websocket"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/websocket
+           http://www.springframework.org/schema/websocket/spring-websocket.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <context:component-scan base-package="com.example.websocketdemo"/>
+
+    <websocket:message-broker application-destination-prefix="/app">
+        <websocket:stomp-endpoint path="/ws-example">
+            <websocket:sockjs/>
+        </websocket:stomp-endpoint>
+        <websocket:simple-broker prefix="/topic"/>
+    </websocket:message-broker>
+
+</beans>
+```
+
+#### 1.3. Message Controller
+
+This remains the same.
+
+```java
+package com.example.websocketdemo.controller;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class MessageController {
+
+    @MessageMapping("/sendMessage")
+    @SendTo("/topic/messages")
+    public Message sendMessage(Message message) {
+        return message;
+    }
+}
+```
+
+#### 1.4. Message Model
+
+This remains the same.
+
+```java
+package com.example.websocketdemo.model;
+
+public class Message {
+    private String message;
+
+    public Message() {
+    }
+
+    public Message(String message) {
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+}
+```
+
+#### 1.5. Random Data Generator
+
+This remains the same.
+
+```java
+package com.example.websocketdemo.scheduler;
+
+import com.example.websocketdemo.model.Message;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.Random;
+
+@Component
+public class RandomDataGenerator {
+
+    @Autowired
+    private SimpMessagingTemplate template;
+
+    private Random random = new Random();
+
+    @Scheduled(fixedRate = 5000)
+    public void generateData() {
+        String data = "Random Data: " + random.nextInt(100);
+        template.convertAndSend("/topic/messages", new Message(data));
+    }
+}
+```
+
+#### 1.6. Enable Scheduling
+
+Enable scheduling in your main application class.
+
+```java
+package com.example.websocketdemo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.context.annotation.ImportResource;
+
+@SpringBootApplication
+@EnableScheduling
+@ImportResource("classpath:integrate.xml")
+public class WebSocketDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebSocketDemoApplication.class, args);
+    }
+}
+```
+
+### Step 2: Create the HTML File
+
+Create an HTML file that connects to the WebSocket and displays the messages.
+
+#### `src/main/resources/static/index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Example</title>
+</head>
+<body>
+    <h1>WebSocket Example</h1>
+    <div id="messages"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/ws-example');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/messages', function (messageOutput) {
+                    showMessage(JSON.parse(messageOutput.body).message);
+                });
+            });
+        }
+
+        function showMessage(message) {
+            var messagesDiv = document.getElementById('messages');
+            var messageElement = document.createElement('div');
+            messageElement.appendChild(document.createTextNode(message));
+            messagesDiv.appendChild(messageElement);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Step 3: Run Your Application
+
+Run your Spring Boot application and open `http://localhost:8080` in your browser. You should see the random data being generated and displayed on the web page every 5 seconds.
+
+This setup moves the WebSocket configuration to the XML file `integrate.xml` while keeping the rest of the Spring Boot application structure unchanged.
