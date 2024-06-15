@@ -262,3 +262,40 @@ Ensure you have the frontend HTML to display messages from the WebSocket.
 - **`index.html`**: Frontend HTML to display Kafka messages received via WebSocket.
 
 This setup consolidates the entire application with Kafka and WebSocket configurations into a single XML file (`application-config.xml`), providing a complete example of consuming Kafka messages and pushing them to a WebSocket-connected frontend in a Spring Boot application. Adjust configurations and paths according to your specific environment and requirements.
+
+
+
+
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:websocket="http://www.springframework.org/schema/websocket"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                           http://www.springframework.org/schema/websocket http://www.springframework.org/schema/websocket/spring-websocket.xsd
+                           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+                           http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd">
+
+    <!-- WebSocket message broker configuration -->
+    <websocket:message-broker application-destination-prefix="/app">
+        <websocket:stomp-endpoint path="/ws-example">
+            <websocket:sockjs/>
+        </websocket:stomp-endpoint>
+        <websocket:simple-broker prefix="/topic"/>
+    </websocket:message-broker>
+
+    <!-- Channels -->
+    <int:channel id="messagesFromKafka"/>
+
+    <!-- Router configuration -->
+    <int:router id="kafkaInboundMessageRouter" ref="kafkaMessageRouter" input-channel="messagesFromKafka" method="route"/>
+
+    <!-- Session cache channel -->
+    <int:channel id="sessionCacheChannel"/>
+
+    <!-- Service activator for session cache -->
+    <int:service-activator input-channel="sessionCacheChannel"
+                           output-channel="allKafkaMessages"
+                           ref="sessionCache" method="sendingToWebsocket"/>
+</beans>
