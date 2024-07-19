@@ -1,0 +1,253 @@
+Designing a Spring Boot application with WebSocket using STOMP for messaging, along with a simple front-end client, requires several steps. Below is a high-level outline for both the back-end and the front-end implementation.
+
+### Back-End: Spring Boot Application
+
+#### 1. Dependencies
+
+Add the necessary dependencies in your `pom.xml` for Spring Boot WebSocket and STOMP:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-stomp</artifactId>
+    </dependency>
+</dependencies>
+```
+
+#### 2. WebSocket Configuration
+
+Create a configuration class to set up WebSocket and STOMP.
+
+```java
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws").setAllowedOrigins("*").withSockJS();
+    }
+}
+```
+
+#### 3. Message Controller
+
+Create a controller to handle WebSocket messages.
+
+```java
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class WebSocketController {
+
+    @MessageMapping("/subscribe")
+    @SendTo("/topic/messages")
+    public ResponseMessage subscribe(RequestMessage message) throws Exception {
+        return new ResponseMessage(message.getDestination(), "Subscription successful");
+    }
+
+    @MessageMapping("/send")
+    @SendTo("/topic/messages")
+    public ResponseMessage send(MessageContent content) throws Exception {
+        return new ResponseMessage(content.getDestination(), "Message received");
+    }
+}
+```
+
+#### 4. Message Models
+
+Create models for the messages.
+
+```java
+public class RequestMessage {
+    private String destination;
+
+    // Getters and setters
+}
+
+public class MessageContent {
+    private String destination;
+    private String content;
+
+    // Getters and setters
+}
+
+public class ResponseMessage {
+    private String destination;
+    private String response;
+
+    public ResponseMessage(String destination, String response) {
+        this.destination = destination;
+        this.response = response;
+    }
+
+    // Getters and setters
+}
+```
+
+### Front-End: Simple HTML/JavaScript Client
+
+#### 1. HTML Structure
+
+Create an `index.html` file with basic structure.
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket STOMP Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+    <h1>WebSocket STOMP Client</h1>
+    <div>
+        <input type="text" id="destination" placeholder="Destination"/>
+        <button onclick="subscribe()">Subscribe</button>
+    </div>
+    <div>
+        <textarea id="messageContent" placeholder="Message content"></textarea>
+        <button onclick="sendMessage()">Send Message</button>
+    </div>
+    <div id="messages"></div>
+
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+            });
+        }
+
+        function subscribe() {
+            var destination = document.getElementById('destination').value;
+            stompClient.subscribe('/topic/messages', function (message) {
+                showMessage(JSON.parse(message.body).response);
+            });
+            stompClient.send("/app/subscribe", {}, JSON.stringify({'destination': destination}));
+        }
+
+        function sendMessage() {
+            var destination = document.getElementById('destination').value;
+            var content = document.getElementById('messageContent').value;
+            stompClient.send("/app/send", {}, JSON.stringify({'destination': destination, 'content': content}));
+        }
+
+        function showMessage(message) {
+            var messages = document.getElementById('messages');
+            var messageElement = document.createElement('div');
+            messageElement.innerText = message;
+            messages.appendChild(messageElement);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Summary
+
+This setup provides a basic Spring Boot application with WebSocket and STOMP messaging capabilities and a simple HTML/JavaScript client for sending and receiving messages. Adjust and expand the models and controllers as needed for your specific use case.
+
+
+
+To connect to the WebSocket server using the URL `ws://localhost:8080/ws` on the client side, you should ensure that the JavaScript code is configured to use this URL correctly. Below is an updated version of the client-side HTML/JavaScript code:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket STOMP Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+    <h1>WebSocket STOMP Client</h1>
+    <div>
+        <input type="text" id="destination" placeholder="Destination"/>
+        <button onclick="subscribe()">Subscribe</button>
+    </div>
+    <div>
+        <textarea id="messageContent" placeholder="Message content"></textarea>
+        <button onclick="sendMessage()">Send Message</button>
+    </div>
+    <div id="messages"></div>
+
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('http://localhost:8080/ws'); // Use 'http' not 'ws' with SockJS
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+            });
+        }
+
+        function subscribe() {
+            var destination = document.getElementById('destination').value;
+            stompClient.subscribe('/topic/messages', function (message) {
+                showMessage(JSON.parse(message.body).response);
+            });
+            stompClient.send("/app/subscribe", {}, JSON.stringify({'destination': destination}));
+        }
+
+        function sendMessage() {
+            var destination = document.getElementById('destination').value;
+            var content = document.getElementById('messageContent').value;
+            stompClient.send("/app/send", {}, JSON.stringify({'destination': destination, 'content': content}));
+        }
+
+        function showMessage(message) {
+            var messages = document.getElementById('messages');
+            var messageElement = document.createElement('div');
+            messageElement.innerText = message;
+            messages.appendChild(messageElement);
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+```
+
+### Explanation
+
+1. **SockJS URL**: The `SockJS` constructor should use the HTTP URL `http://localhost:8080/ws` rather than `ws://`. SockJS handles the WebSocket handshake and fallback to other protocols if necessary.
+
+2. **Script Loading**: The client-side JavaScript libraries for SockJS and STOMP are included using CDN links.
+
+3. **Connection**: The `connect` function sets up the WebSocket connection to the server using the specified URL.
+
+4. **Subscription and Messaging**: The `subscribe` and `sendMessage` functions handle subscribing to a topic and sending messages to the server.
+
+5. **Displaying Messages**: The `showMessage` function appends received messages to the `messages` div.
+
+This setup ensures that the client connects to the WebSocket server at `ws://localhost:8080/ws` using the correct SockJS configuration.
