@@ -1,0 +1,303 @@
+Here's a complete Spring Boot application with WebSocket using STOMP and Redis cache:
+
+### 1. Create Spring Boot Project
+
+Use [Spring Initializr](https://start.spring.io/) to create a new project with the following dependencies:
+- Spring Web
+- WebSocket
+- Spring Data Redis
+- Spring Boot DevTools
+- Lombok (optional)
+
+### 2. Project Structure
+
+```
+src/main/java/com/example/demo/
+├── DemoApplication.java
+├── config/
+│   ├── RedisConfig.java
+│   └── WebSocketConfig.java
+├── controller/
+│   └── WebSocketController.java
+├── model/
+│   ├── Greeting.java
+│   └── HelloMessage.java
+└── service/
+    └── GreetingService.java
+src/main/resources/
+├── application.properties
+└── static/
+    └── index.html
+```
+
+### 3. Application Code
+
+#### `DemoApplication.java`
+
+```java
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
+}
+```
+
+#### `config/WebSocketConfig.java`
+
+```java
+package com.example.demo.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*"); // Remove .withSockJS() to use plain WebSocket
+    }
+}
+```
+
+#### `config/RedisConfig.java`
+
+```java
+package com.example.demo.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+
+@Configuration
+public class RedisConfig {
+
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory() {
+        return new LettuceConnectionFactory();
+    }
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(redisConnectionFactory);
+        return template;
+    }
+}
+```
+
+#### `controller/WebSocketController.java`
+
+```java
+package com.example.demo.controller;
+
+import com.example.demo.model.Greeting;
+import com.example.demo.model.HelloMessage;
+import com.example.demo.service.GreetingService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class WebSocketController {
+
+    @Autowired
+    private GreetingService greetingService;
+
+    @MessageMapping("/hello")
+    @SendTo("/topic/greetings")
+    public Greeting greeting(HelloMessage message) throws Exception {
+        Thread.sleep(1000); // simulated delay
+        Greeting greeting = new Greeting("Hello, " + message.getName() + "!");
+        greetingService.saveGreeting(greeting);
+        return greeting;
+    }
+
+    // Optional: Endpoint to retrieve cached greeting
+    @MessageMapping("/last-greeting")
+    @SendTo("/topic/greetings")
+    public Greeting lastGreeting() {
+        return greetingService.getGreeting();
+    }
+}
+```
+
+#### `model/Greeting.java`
+
+```java
+package com.example.demo.model;
+
+public class Greeting {
+
+    private String content;
+
+    public Greeting() {
+    }
+
+    public Greeting(String content) {
+        this.content = content;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+}
+```
+
+#### `model/HelloMessage.java`
+
+```java
+package com.example.demo.model;
+
+public class HelloMessage {
+
+    private String name;
+
+    public HelloMessage() {
+    }
+
+    public HelloMessage(String name) {
+        this.name = name;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+}
+```
+
+#### `service/GreetingService.java`
+
+```java
+package com.example.demo.service;
+
+import com.example.demo.model.Greeting;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+@Service
+public class GreetingService {
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    private static final String GREETING_KEY = "Greeting";
+
+    public void saveGreeting(Greeting greeting) {
+        redisTemplate.opsForValue().set(GREETING_KEY, greeting);
+    }
+
+    public Greeting getGreeting() {
+        return (Greeting) redisTemplate.opsForValue().get(GREETING_KEY);
+    }
+}
+```
+
+### 4. Frontend Configuration
+
+Create an `index.html` in the `src/main/resources/static` directory:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script type="text/javascript">
+        var stompClient = null;
+
+        function setConnected(connected) {
+            document.getElementById('connect').disabled = connected;
+            document.getElementById('disconnect').disabled = !connected;
+            document.getElementById('conversationDiv').style.visibility = connected ? 'visible' : 'hidden';
+            document.getElementById('response').innerHTML = '';
+        }
+
+        function connect() {
+            var socket = new WebSocket('ws://localhost:8080/ws');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                setConnected(true);
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/greetings', function (greeting) {
+                    showGreeting(JSON.parse(greeting.body).content);
+                });
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            setConnected(false);
+            console.log('Disconnected');
+        }
+
+        function sendName() {
+            var name = document.getElementById('name').value;
+            stompClient.send('/app/hello', {}, JSON.stringify({'name': name}));
+        }
+
+        function showGreeting(message) {
+            var response = document.getElementById('response');
+            var p = document.createElement('p');
+            p.appendChild(document.createTextNode(message));
+            response.appendChild(p);
+        }
+    </script>
+</head>
+<body>
+    <div>
+        <button id="connect" onclick="connect();">Connect</button>
+        <button id="disconnect" onclick="disconnect();" disabled="disabled">Disconnect</button>
+    </div>
+    <div id="conversationDiv" style="visibility: hidden;">
+        <input type="text" id="name" />
+        <button onclick="sendName();">Send</button>
+        <p id="response"></p>
+    </div>
+</body>
+</html>
+```
+
+### 5. Application Properties
+
+Configure your Redis connection in `src/main/resources/application.properties`:
+
+```properties
+spring.redis.host=localhost
+spring.redis.port=6379
+```
+
+### 6. Run the Application
+
+Run your Spring Boot application and open your browser to `http://localhost:8080`. The frontend will connect to the WebSocket server at `ws://localhost:8080/ws` using the native WebSocket API and display the real-time greetings.
